@@ -25,6 +25,24 @@ CREATE TABLE IF NOT EXISTS health_diary (
 )
 ''')
 
+
+# Create table for prescriptions
+c.execute('''
+CREATE TABLE IF NOT EXISTS prescriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    original_text TEXT,
+    medication TEXT,
+    dosage TEXT,
+    instructions TEXT,
+    duration TEXT,
+    purpose TEXT,
+    side_effects TEXT,
+    follow_up TEXT,
+    upload_date TEXT,
+    status TEXT
+)
+''')
+
 conn.commit()
 conn.close()
 print("✅ Database initialized successfully with expanded schema!")

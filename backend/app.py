@@ -1,10 +1,16 @@
 from flask import Flask, request, jsonify
 import sqlite3
 import os
-import requests   # ✅ missing before
+from datetime import datetime
+import requests   
 from flask_cors import CORS 
 import json
+from PIL import Image
+import pytesseract
+from dotenv import load_dotenv
 
+# ------------------- Setup -------------------
+load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
@@ -147,5 +153,145 @@ def ai_summary():
     })
 
 
-if __name__ == "__main__":
+
+
+
+
+
+
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+
+
+# ------------------- DB Helper -------------------
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# ------------------- OCR -------------------
+def extract_text_from_image(file_path):
+    try:
+        text = pytesseract.image_to_string(Image.open(file_path)).strip()
+        print("OCR Text:", text)
+        return text
+    except Exception as e:
+        print("OCR Error:", e)
+        return ""
+
+# ------------------- AI Simplification for multiple medicines -------------------
+def simplify_text_with_ai(original_text):
+    """
+    Extracts all medicines from prescription text and outputs an array of JSON objects.
+    Each object contains: medication, dosage, instructions, duration, purpose, side_effects, follow_up, status
+    """
+    if not HF_KEY:
+        print("No HF_KEY set")
+        return []
+
+    prompt = f"""
+You are a medical AI assistant. The following is a prescription text:
+
+{original_text}
+
+Please extract **all medicines mentioned** and their details. It is **mandatory** to fill all fields.
+- If the prescription text does not mention something, **use your medical knowledge** to reasonably fill it.
+Return an **array of JSON objects**, each with these keys:
+medication, dosage, instructions, duration, purpose, side_effects, follow_up, status
+
+Return only valid JSON array. Example format:
+[
+  {{
+    "medication": "Paracetamol",
+    "dosage": "500mg",
+    "instructions": "Take one tablet after meal",
+    "duration": "5 days",
+    "purpose": "Fever",
+    "side_effects": "Nausea",
+    "follow_up": "After 5 days",
+    "status": "active"
+  }},
+  ...
+]
+"""
+    try:
+        payload = {
+            "model":"Qwen/Qwen3-Coder-480B-A35B-Instruct:cerebras",
+            "messages":[{"role":"user","content":prompt}]
+        }
+        r = requests.post(HF_URL, headers=HEADERS, json=payload, timeout=60)
+        r.raise_for_status()
+        result = r.json()
+        response_text = result["choices"][0]["message"]["content"].strip()
+
+        # Extract JSON array
+        start = response_text.find("[")
+        end = response_text.rfind("]") + 1
+        medicines = json.loads(response_text[start:end])
+
+    except Exception as e:
+        print("AI Error:", e)
+        medicines = []
+
+    # Ensure all keys exist for each medicine
+    for med in medicines:
+        for key in ["medication","dosage","instructions","duration","purpose","side_effects","follow_up","status"]:
+            if key not in med or med[key] is None or med[key] == "":
+                med[key] = "active" if key=="status" else "Not specified, inferred by AI"
+
+    return medicines
+
+# ------------------- Upload Endpoint -------------------
+@app.route('/api/prescriptions/upload', methods=['POST'])
+def upload_prescription():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "Empty filename"}), 400
+
+    # Save file
+    if not os.path.exists('uploads'):
+        os.makedirs('uploads')
+    file_path = os.path.join('uploads', file.filename)
+    file.save(file_path)
+    print("Saved file:", file_path)
+
+    # OCR
+    original_text = extract_text_from_image(file_path)
+    if not original_text:
+        return jsonify({"error": "Failed to extract text"}), 500
+
+    # AI Simplify - multiple medicines
+    medicines = simplify_text_with_ai(original_text)
+
+    # Save each medicine to DB
+    try:
+        with get_db() as conn:
+            c = conn.cursor()
+            for med in medicines:
+                c.execute('''
+                    INSERT INTO prescriptions
+                    (original_text, medication, dosage, instructions, duration, purpose, side_effects, follow_up, upload_date, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    original_text,
+                    med['medication'],
+                    med['dosage'],
+                    med['instructions'],
+                    med['duration'],
+                    med['purpose'],
+                    med['side_effects'],
+                    med['follow_up'],
+                    datetime.now().strftime('%Y-%m-%d'),
+                    med['status']
+                ))
+            conn.commit()
+    except Exception as e:
+        print("DB Error:", e)
+        return jsonify({"error": "Failed to save to database"}), 500
+
+    return jsonify({"message": "Prescription simplified successfully", "prescriptions": medicines})
+
+if __name__=='__main__':
     app.run(debug=True)
