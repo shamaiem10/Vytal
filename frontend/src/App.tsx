@@ -9,6 +9,7 @@ import HealthDiary from "./pages/HealthDiary";
 import Summaries from "./pages/Summaries";
 import Prescriptions from "./pages/Prescriptions";
 import NotFound from "./pages/NotFound";
+import VytalHero from "./pages/hero";
 
 const queryClient = new QueryClient();
 
@@ -18,17 +19,23 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="diary" element={<HealthDiary />} />
-            <Route path="summaries" element={<Summaries />} />
-            <Route path="prescriptions" element={<Prescriptions />} />
-          </Route>
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+  <Routes>
+    {/* Standalone Hero page */}
+    <Route path="/" element={<VytalHero />} />
+
+    {/* Layout wrapper for all dashboard pages */}
+    <Route element={<Layout />}>
+      <Route path="dashboard" element={<Dashboard />} />
+      <Route path="diary" element={<HealthDiary />} />
+      <Route path="summaries" element={<Summaries />} />
+      <Route path="prescriptions" element={<Prescriptions />} />
+    </Route>
+
+    {/* Catch-all */}
+    <Route path="*" element={<NotFound />} />
+  </Routes>
+</BrowserRouter>
+
     </TooltipProvider>
   </QueryClientProvider>
 );

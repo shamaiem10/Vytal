@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: Activity },
+  { name: 'Dashboard', href: '/dashboard', icon: Activity },
   { name: 'Health Diary', href: '/diary', icon: BookOpen },
   { name: 'Summaries', href: '/summaries', icon: BarChart3 },
   { name: 'Prescriptions', href: '/prescriptions', icon: FileText },
