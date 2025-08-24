@@ -1,4 +1,4 @@
-# 🌱 Vytal – Your AI-Powered Health & Wellness Companion
+# Vytal – Your AI-Powered Health & Wellness Companion 🩺💊🧬🩹
 
 [![GitHub issues](https://img.shields.io/github/issues/shamaiem10/Vytal)](https://github.com/shamaiem10/Vytal/issues)
 [![GitHub stars](https://img.shields.io/github/stars/shamaiem10/Vytal)](https://github.com/shamaiem10/Vytal/stargazers)
