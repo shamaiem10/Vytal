@@ -87,24 +87,40 @@ HEADERS = {"Authorization": f"Bearer {HF_KEY}"}
 
 
 def analyze_health_text(text, period="Recent Entries"):
-    prompt = f"Analyze the health diary for {period}:\n{text}\nRespond strictly in JSON with keys summary, insights, recommendations."
+    # Stronger prompt asking for recommendations explicitly
+    prompt = (
+        f"Analyze the health diary for {period}:\n{text}\n"
+        "Respond strictly in JSON format with the following keys:\n"
+        "summary (string), insights (list of strings), recommendations (list of strings).\n"
+        "Make sure 'recommendations' is always present and non-empty if possible."
+    )
+
     payload = {
         "model": "Qwen/Qwen3-Coder-480B-A35B-Instruct:cerebras",
         "messages": [{"role": "user", "content": prompt}]
     }
+
     r = requests.post(HF_URL, headers=HEADERS, json=payload)
     r.raise_for_status()
     result = r.json()
     response_text = result["choices"][0]["message"]["content"].strip()
+
     try:
-        return json.loads(response_text)
+        output = json.loads(response_text)
     except:
         # fallback if model returns extra text
         start = response_text.find("{")
         end = response_text.rfind("}") + 1
         if start != -1 and end != -1:
-            return json.loads(response_text[start:end])
-        return {"summary": response_text, "insights": [], "recommendations": []}
+            output = json.loads(response_text[start:end])
+        else:
+            output = {"summary": response_text, "insights": [], "recommendations": []}
+
+    # Ensure recommendations key is always present and is a list
+    if "recommendations" not in output or not isinstance(output["recommendations"], list):
+        output["recommendations"] = []
+
+    return output
 
 # -----------------------------
 # Route: Single AI Analysis

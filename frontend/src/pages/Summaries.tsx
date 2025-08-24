@@ -30,14 +30,12 @@ export default function Summaries() {
   const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Fetch diary entries for charts
     fetch("http://localhost:5000/api/diary")
       .then((res) => res.json())
       .then((data) => {
         const bpArr = [];
         const hrArr = [];
-        const moodCount = { Happy: 0, Sad: 0 };
-        const moodMapping = { Excellent: "Happy", Good: "Happy", Fair: "Sad", Poor: "Sad" };
+        const moodCount = { Happy: 0, Moderate: 0, Low: 0 };
 
         data.forEach((entry) => {
           if (entry.bp && entry.bp.includes("/")) {
@@ -45,10 +43,14 @@ export default function Summaries() {
             bpArr.push({ day: entry.date, systolic, diastolic });
           }
           if (entry.hr) hrArr.push({ day: entry.date, hr: Number(entry.hr) });
-          if (entry.mood) {
-            const category = moodMapping[entry.mood] || "Sad";
-            moodCount[category] += 1;
-          }
+
+          // Map mood strings to categories
+          let category = "Low";
+          if (["Excellent", "Good"].includes(entry.mood)) category = "Happy";
+          else if (["Fair"].includes(entry.mood)) category = "Moderate";
+          else category = "Low";
+
+          moodCount[category] += 1;
         });
 
         setBpData(bpArr);
@@ -57,40 +59,35 @@ export default function Summaries() {
         const moodArr = Object.keys(moodCount).map((key) => ({
           mood: key,
           count: moodCount[key],
-          color: key === "Happy" ? "#10b981" : "#ef4444",
+          color:
+            key === "Happy"
+              ? "#34D399" // bright green
+              : key === "Moderate"
+              ? "#3B82F6" // blue
+              : "#F0FDF4", // soft white/light green
         }));
-
         setMoodData(moodArr);
       })
       .catch((err) => console.error("Error fetching diary data:", err));
 
-    // Fetch AI summary
     fetch("http://localhost:5000/api/summaries/ai")
       .then((res) => res.json())
       .then((data) => {
-        const summaryText = data.summary
-          ? `Blood Pressure ${data.summary.blood_pressure_range}, Heart Rate ${data.summary.heart_rate_range}, Mood ${data.summary.mood_range}, Sugar ${data.summary.sugar_range}, Total Entries: ${data.summary.total_entries}`
-          : "No summary available.";
-
-        let insightsArr: string[] = [];
-        if (data.insights) {
-          insightsArr = Object.values(data.insights);
-        }
-
+        const summaryText = data.summary || "No summary available.";
+        const insightsArr: string[] = Array.isArray(data.insights) ? data.insights : [];
         let recArr: string[] = [];
         if (data.recommendations) {
-          const recObj = data.recommendations;
-          if (recObj.follow_up) recArr.push(`Follow-up: ${recObj.follow_up}`);
-          if (recObj.immediate) recArr.push(...recObj.immediate.map((r: string) => `Immediate: ${r}`));
-          if (recObj.preventive) recArr.push(`Preventive: ${recObj.preventive}`);
+          if (Array.isArray(data.recommendations)) recArr = data.recommendations;
+          else {
+            const recObj = data.recommendations;
+            if (recObj.follow_up) recArr.push(`Follow-up: ${recObj.follow_up}`);
+            if (recObj.immediate) recArr.push(...(recObj.immediate || []).map((r: string) => `Immediate: ${r}`));
+            if (recObj.preventive) recArr.push(`Preventive: ${recObj.preventive}`);
+          }
         }
-
         setAiNotes({ summary: summaryText, insights: insightsArr, recommendations: recArr });
       })
-      .catch((err) => {
-        console.error("Error fetching AI summary:", err);
-        setAiNotes({ summary: "No AI summary available.", insights: [], recommendations: [] });
-      });
+      .catch(() => setAiNotes({ summary: "No AI summary available.", insights: [], recommendations: [] }));
   }, []);
 
   const handleExport = async () => {
@@ -117,9 +114,8 @@ export default function Summaries() {
         </Button>
       </div>
 
-      {/* Report container */}
       <div ref={reportRef} className="p-6 bg-white text-black space-y-6">
-        {/* AI Summary Card */}
+        {/* AI Summary */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -129,13 +125,10 @@ export default function Summaries() {
             <CardDescription>Generated from your recent diary entries</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Summary */}
             <div className="p-3 bg-gray-100 rounded">
               <h4 className="font-medium mb-1">Summary:</h4>
               <p className="text-sm whitespace-pre-wrap">{aiNotes.summary}</p>
             </div>
-
-            {/* Key Insights */}
             {aiNotes.insights.length > 0 && (
               <div className="p-3 bg-gray-50 rounded">
                 <h4 className="font-medium mb-2">Key Insights:</h4>
@@ -149,8 +142,6 @@ export default function Summaries() {
                 </ul>
               </div>
             )}
-
-            {/* Recommendations */}
             {aiNotes.recommendations.length > 0 && (
               <div className="p-3 bg-gray-50 rounded">
                 <h4 className="font-medium mb-2">Recommendations:</h4>
@@ -208,41 +199,50 @@ export default function Summaries() {
           </Card>
         </div>
 
-        {/* Mood Chart */}
-        <Card className="mt-6">
+        {/* Mood Pie Chart */}
+        <Card>
           <CardHeader>
             <CardTitle>Mood Overview</CardTitle>
-            <CardDescription>Happy vs Sad days</CardDescription>
+            <CardDescription>Happy vs Moderate vs Low days</CardDescription>
           </CardHeader>
           <CardContent style={{ height: 250 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={moodData}
+                  dataKey="count"
+                  nameKey="mood"
                   cx="50%"
                   cy="50%"
                   outerRadius={80}
+                  innerRadius={40}
                   label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  dataKey="count"
                 >
                   {moodData.map((entry, idx) => (
                     <Cell key={idx} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value, name) => [`${value} days`, name]} />
+                <Tooltip formatter={(value) => `${value} days`} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
         {/* Mood Legend */}
-        <div className="mt-4 flex gap-6">
+        <div className="mt-4 flex gap-6 justify-center">
           {moodData.map((mood, idx) => (
             <div key={idx} className="flex items-center gap-2">
-              <div style={{ width: 16, height: 16, backgroundColor: mood.color, borderRadius: 4 }}></div>
-              <div>
-                <p className="font-medium">{mood.mood}</p>
-                <p className="text-sm">{mood.count} days</p>
+              <div
+                style={{
+                  width: 20,
+                  height: 20,
+                  backgroundColor: mood.color,
+                  borderRadius: 8,
+                }}
+              />
+              <div className="flex flex-col items-start">
+                <span className="font-medium">{mood.mood}</span>
+                <span className="text-sm">{mood.count} days</span>
               </div>
             </div>
           ))}
